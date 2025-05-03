@@ -1,7 +1,3 @@
-# Node-Modules
 node_modules/
-# Log-Dateien
-*.log
-# evtl. Umgebungsdateien
+dist/
 .env
-
