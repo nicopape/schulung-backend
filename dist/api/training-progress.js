@@ -15,8 +15,9 @@ async function handler(req, res) {
             }
             let sql = 'SELECT * FROM training_progress WHERE user_id = ?';
             const params = [userId];
-            if (completed)
+            if (completed) {
                 sql += ' AND completed = TRUE';
+            }
             const [rows] = await mariadb_1.default.execute(sql, params);
             return res.status(200).json(rows);
         }
@@ -27,29 +28,39 @@ async function handler(req, res) {
                     .status(400)
                     .json({ message: 'userId, trainingId und progress sind erforderlich' });
             }
+            // Falls completedAt übergeben, in JS-Date konvertieren, sonst null
+            let completedDate = null;
+            if (completed) {
+                completedDate = completedAt
+                    ? new Date(completedAt)
+                    : new Date();
+            }
+            // Prüfen, ob schon ein Eintrag existiert
             const [existing] = await mariadb_1.default.execute('SELECT 1 FROM training_progress WHERE user_id = ? AND training_id = ?', [userId, trainingId]);
             if (existing.length) {
+                // Update bestehender Eintrag
                 await mariadb_1.default.execute(`UPDATE training_progress
              SET progress = ?, completed = ?, score = ?, completed_at = ?
            WHERE user_id = ? AND training_id = ?`, [
                     progress,
-                    completed,
+                    completed ? 1 : 0,
                     score ?? null,
-                    completedAt ?? (completed ? new Date().toISOString() : null),
+                    completedDate,
                     userId,
-                    trainingId
+                    trainingId,
                 ]);
             }
             else {
+                // Neuer Eintrag
                 await mariadb_1.default.execute(`INSERT INTO training_progress
              (id, user_id, training_id, progress, completed, score, completed_at)
            VALUES (UUID(), ?, ?, ?, ?, ?, ?)`, [
                     userId,
                     trainingId,
                     progress,
-                    completed,
+                    completed ? 1 : 0,
                     score ?? null,
-                    completed ? new Date().toISOString() : null
+                    completedDate,
                 ]);
             }
             return res.status(200).json({ success: true });

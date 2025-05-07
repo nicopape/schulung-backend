@@ -15,7 +15,9 @@ export default async function handler(req: Request, res: Response) {
 
       let sql = 'SELECT * FROM training_progress WHERE user_id = ?';
       const params: any[] = [userId];
-      if (completed) sql += ' AND completed = TRUE';
+      if (completed) {
+        sql += ' AND completed = TRUE';
+      }
 
       const [rows] = await mariadbPool.execute<RowDataPacket[]>(sql, params);
       return res.status(200).json(rows);
@@ -30,26 +32,37 @@ export default async function handler(req: Request, res: Response) {
           .json({ message: 'userId, trainingId und progress sind erforderlich' });
       }
 
+      // Falls completedAt übergeben, in JS-Date konvertieren, sonst null
+      let completedDate: Date | null = null;
+      if (completed) {
+        completedDate = completedAt
+          ? new Date(completedAt)
+          : new Date();
+      }
+
+      // Prüfen, ob schon ein Eintrag existiert
       const [existing] = await mariadbPool.execute<RowDataPacket[]>(
         'SELECT 1 FROM training_progress WHERE user_id = ? AND training_id = ?',
         [userId, trainingId]
       );
 
       if (existing.length) {
+        // Update bestehender Eintrag
         await mariadbPool.execute(
           `UPDATE training_progress
              SET progress = ?, completed = ?, score = ?, completed_at = ?
            WHERE user_id = ? AND training_id = ?`,
           [
             progress,
-            completed,
+            completed ? 1 : 0,
             score ?? null,
-            completedAt ?? (completed ? new Date().toISOString() : null),
+            completedDate,
             userId,
-            trainingId
+            trainingId,
           ]
         );
       } else {
+        // Neuer Eintrag
         await mariadbPool.execute(
           `INSERT INTO training_progress
              (id, user_id, training_id, progress, completed, score, completed_at)
@@ -58,9 +71,9 @@ export default async function handler(req: Request, res: Response) {
             userId,
             trainingId,
             progress,
-            completed,
+            completed ? 1 : 0,
             score ?? null,
-            completed ? new Date().toISOString() : null
+            completedDate,
           ]
         );
       }
@@ -69,10 +82,10 @@ export default async function handler(req: Request, res: Response) {
     }
 
     return res.status(405).json({ message: 'Methode nicht erlaubt' });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Datenbankfehler:', error);
     return res
       .status(500)
-      .json({ message: 'Datenbankfehler', error: (error as Error).message });
+      .json({ message: 'Datenbankfehler', error: error.message });
   }
 }
